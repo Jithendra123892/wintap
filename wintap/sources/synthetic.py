@@ -94,6 +94,7 @@ class SyntheticSource(Source):
         t = time.monotonic()
         dt = 1.0 / self.fs
         while not self._stop.is_set():
+            self.throttle()
             req = None
             try:
                 req = self._req.get(timeout=dt * 8 if self.realtime else 0.001)

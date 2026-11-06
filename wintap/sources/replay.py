@@ -41,5 +41,7 @@ class ReplaySource(Source):
                     while time.monotonic() < t_emit:
                         time.sleep(0.001)
                 self.put(r["k"], t_emit, r["x"], r["y"], r["z"])
+                if not self.realtime:
+                    self.throttle()
 
         threading.Thread(target=run, daemon=True, name="wintap-replay").start()
