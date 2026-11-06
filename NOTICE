@@ -1,0 +1,19 @@
+WinTap
+======
+
+This project is a Windows port of **LidTap** by Yemcube:
+https://github.com/yemcube/lidtap (MIT License)
+
+LidTap's license requires the following attribution on public sharing:
+
+    Based on LidTap by Yemcube (https://github.com/yemcube/lidtap)
+
+The portable core of WinTap (detector, features, model, server, web UI) is
+derived from LidTap's source under the same MIT License. The macOS-only IOKit
+sensor layer and the macOS shell-action layer were replaced with Windows
+equivalents (WinRT sensors / raw HID, RegisterPowerSettingNotification lid
+state, low-level keyboard/mouse hooks, SendInput actions); see
+`wintap/sources/` and `wintap/actions.py`.
+
+Copyright (c) 2026 Yemcube — LidTap (MIT)
+Copyright (c) 2026 Jithendra — WinTap port (MIT)

@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wintap"
+version = "0.1.0"
+description = "Tap zones on your Windows laptop lid using the built-in IMU (port of LidTap to Windows)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Jithendra" }]
+keywords = ["lid", "tap", "gesture", "imu", "accelerometer", "gyroscope", "windows", "accessibility"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Win32 (MS Windows)",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3",
+    "Topic :: Multimedia",
+]
+dependencies = [
+    "numpy>=2",
+    "scikit-learn>=1.5",
+]
+
+[project.optional-dependencies]
+winrt = ["winsdk>=1.0.0b10; sys_platform == 'win32'"]
+hid = ["hidapi>=0.14; sys_platform == 'win32'", "hidparser>=0.1; sys_platform == 'win32'"]
+all = ["winsdk>=1.0.0b10; sys_platform == 'win32'", "hidapi>=0.14; sys_platform == 'win32'", "hidparser>=0.1; sys_platform == 'win32'"]
+dev = ["pytest>=8"]
+
+[project.scripts]
+wintap = "wintap.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["wintap*"]
+
+[tool.setuptools.package-data]
+wintap = ["static/*"]
