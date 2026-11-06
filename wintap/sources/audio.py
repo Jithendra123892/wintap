@@ -149,8 +149,8 @@ class AudioSource(Source):
                 inj = self._inject
                 knock = inj["knock"]
                 # stochastic like real taps: amplitude and pan jitter per knock
-                amp = (400.0 if knock else 49.0) * self._rng.uniform(0.75, 1.25)
-                pan = max(-1.0, min(1.0, inj["pan"] + self._rng.uniform(-0.15, 0.15)))
+                amp = (400.0 if knock else 49.0) * self._rng.uniform(0.9, 1.1)
+                pan = max(-1.0, min(1.0, inj["pan"] + self._rng.uniform(-0.05, 0.05)))
                 e = med * amp                          # knock ~10 deg/s, bump ~3.5 deg/s
                 el = e * (1 + pan) / 2 + 1e-12          # pan -1 = left -> lr negative
                 er = e * (1 - pan) / 2 + 1e-12

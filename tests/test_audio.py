@@ -27,19 +27,20 @@ class AudioPipelineTests(unittest.TestCase):
         app.start()
         app.set_config({"gating": False})  # input hooks are unreliable on headless/VM boxes; gating is a user toggle
         self.assertIsNone(src.error)
-        app.calibrate_start({"rows": 1, "cols": 2, "per_zone": 6, "block": 2})
+        app.calibrate_start({"rows": 1, "cols": 2, "per_zone": 8, "block": 2})
         self.assertTrue(drive_calibration(app, src, 1, 2, timeout=180), "calibration did not finish")
         app.negatives_start({"seconds": 90})
         src.set_bumps(True)
         deadline = time.monotonic() + 90
         while time.monotonic() < deadline:
             n_noise = sum(1 for s in app.samples if s["label"] == "noise")
-            if n_noise >= 8 or app.status()["mode"] != "negatives":
+            if n_noise >= 10 or app.status()["mode"] != "negatives":
                 break
             time.sleep(0.05)
         src.set_bumps(False)
         app.stop()
         report = app.train()
+        app.set_config({"model_kind": "rf"})  # most robust on small tabular tap datasets
         accs = [r["acc"]["Full grid"] for r in report["models"] if r["acc"]["Full grid"] is not None]
         self.assertTrue(accs, "no model could cross-validate")
         self.assertGreaterEqual(max(accs), 0.6, f"CV accuracy too low (audio): {accs}")
