@@ -1,5 +1,7 @@
 # WinTap
 
+[![CI](https://github.com/Jithendra123892/wintap/actions/workflows/ci.yml/badge.svg)](https://github.com/Jithendra123892/wintap/actions/workflows/ci.yml)
+
 Tap zones on your **Windows laptop lid** — double-tap the top-left of the lid to
 switch virtual desktop, top-right to lock, bottom zones for media keys — using
 only the laptop's built-in motion sensor. No admin, no accessibility
