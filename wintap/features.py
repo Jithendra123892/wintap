@@ -66,3 +66,36 @@ def extract(g, a):
         _bands(gm),
         tpl.ravel(),
     ])
+
+
+# Feature definitions for CLI and web UI
+FEATURE_CATEGORIES = {
+    "core": [
+        {"name": "twist_direction", "label": "Twist Direction", "desc": "Gyro twist at peak"},
+        {"name": "early_rotation", "label": "Early Rotation", "desc": "Net early rotation per axis"},
+        {"name": "gyro_energy", "label": "Gyro Energy Split", "desc": "How twist energy splits across axes"},
+        {"name": "shake_direction", "label": "Shake Direction", "desc": "Accel shake direction at peak"},
+        {"name": "accel_energy", "label": "Accel Energy Split", "desc": "How shake energy splits across axes"},
+        {"name": "twist_shake_ratio", "label": "Twist/Shake Ratio", "desc": "Twist per unit shake"},
+        {"name": "tap_strength", "label": "Tap Strength", "desc": "log(gyro peak)"},
+        {"name": "decay_time", "label": "Decay Time", "desc": "Signal decay time normalized"},
+    ],
+    "spectral": [
+        {"name": "spectral_band_0", "label": "Band 0-40Hz", "desc": "Low frequency energy"},
+        {"name": "spectral_band_1", "label": "Band 40-80Hz", "desc": "Mid-low frequency energy"},
+        {"name": "spectral_band_2", "label": "Band 80-160Hz", "desc": "Mid frequency energy"},
+        {"name": "spectral_band_3", "label": "Band 160-400Hz", "desc": "High frequency energy"},
+        {"name": "spectral_band_4", "label": "Band 0-20Hz", "desc": "Very low frequency"},
+        {"name": "spectral_band_5", "label": "Band 20-40Hz", "desc": "Sub low frequency"},
+        {"name": "spectral_band_6", "label": "Band 120-160Hz", "desc": "Upper mid frequency"},
+        {"name": "spectral_band_7", "label": "Band 160-200Hz", "desc": "High-mid frequency"},
+        {"name": "spectral_band_8", "label": "Band 200-300Hz", "desc": "Upper frequency"},
+        {"name": "spectral_band_9", "label": "Band 300-400Hz", "desc": "Very high frequency"},
+        {"name": "spectrogram_peak_1", "label": "Spec Peak 1", "desc": "Spectrogram max 1"},
+        {"name": "spectrogram_peak_2", "label": "Spec Peak 2", "desc": "Spectrogram max 2"},
+    ],
+    "template": [
+        {"name": "gyro_template", "label": "Gyro Template", "desc": "Gyro waveform template (48 values)"},
+        {"name": "combined_template", "label": "Combined Template", "desc": "Gyro+accel combined (96 values)"},
+    ],
+}
