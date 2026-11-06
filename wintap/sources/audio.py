@@ -152,15 +152,15 @@ class AudioSource(Source):
                 amp = (400.0 if knock else 49.0) * self._rng.uniform(0.9, 1.1)
                 pan = max(-1.0, min(1.0, inj["pan"] + self._rng.uniform(-0.05, 0.05)))
                 e = med * amp                          # knock ~10 deg/s, bump ~3.5 deg/s
-                el = e * (1 + pan) / 2 + 1e-12          # pan -1 = left -> lr negative
-                er = e * (1 - pan) / 2 + 1e-12
+                el = e * (1 - pan) / 2 + 1e-12          # pan -1 = left -> lr negative
+                er = e * (1 + pan) / 2 + 1e-12
                 if not knock:
                     accel_div = 2.0                     # bumps are accel-dominated
                 inj["left"] -= 1
                 if inj["left"] <= 0:
                     self._inject = None
             mag = math.sqrt(e) / (math.sqrt(med) + 1e-9) * 0.5  # noise ~0.5 deg/s
-            lr = (el - er) / (el + er + 1e-12)  # -1 = left, +1 = right
+            lr = (er - el) / (el + er + 1e-12)  # -1 = left knock (left mic channel louder), +1 = right
             for _ in range(rows_per_block):
                 t += dt_out
                 self.put("gyro", t, lr * 0.55 * mag, mag, 0.05 * mag)
