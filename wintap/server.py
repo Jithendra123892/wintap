@@ -57,7 +57,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(403, {"error": "forbidden host"})
         path = self.path.split("?", 1)[0]
         if path == "/":
-            html = (STATIC / "index.html").read_text().replace("{{TOKEN}}", TOKEN)
+            html = (STATIC / "index.html").read_text(encoding="utf-8").replace("{{TOKEN}}", TOKEN)
             return self._send(200, html.encode(), TYPES[".html"])
         if path.startswith("/static/"):
             f = (STATIC / path[len("/static/"):]).resolve()

@@ -239,50 +239,51 @@ def cmd_demo(args):
 
 
 def main():
-    p = argparse.ArgumentParser(prog="wintap",
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument("--data", default=argparse.SUPPRESS, help="data dir (config + calibration)")
+    common.add_argument("--source", default=argparse.SUPPRESS, help="auto|winrt|hid|synthetic|replay:FILE")
+    p = argparse.ArgumentParser(prog="wintap", parents=[common],
                                 description="Zone taps on a Windows laptop lid from the built-in IMU. "
                                             "Based on LidTap by Yemcube.")
-    p.add_argument("--data", default=default_data_dir(), help="data dir (config + calibration)")
-    p.add_argument("--source", default="auto", help="auto|winrt|hid|synthetic|replay:FILE")
     sub = p.add_subparsers(dest="cmd", required=True)
 
-    sp = sub.add_parser("serve", help="local web GUI")
+    sp = sub.add_parser(parents=[common], name="serve", help="local web GUI")
     sp.add_argument("--port", type=int, default=8765)
     sp.add_argument("--open", action="store_true")
     sp.set_defaults(fn=cmd_serve)
 
-    sp = sub.add_parser("monitor", help="live tap trace")
+    sp = sub.add_parser(parents=[common], name="monitor", help="live tap trace")
     sp.add_argument("--record", default=None, help="write raw samples to this JSONL file")
     sp.set_defaults(fn=cmd_monitor)
 
-    sp = sub.add_parser("calibrate", help="record calibration taps")
+    sp = sub.add_parser(parents=[common], name="calibrate", help="record calibration taps")
     sp.add_argument("--rows", type=int, default=2)
     sp.add_argument("--cols", type=int, default=2)
     sp.add_argument("--per-zone", type=int, default=15)
     sp.add_argument("--block", type=int, default=5)
     sp.set_defaults(fn=cmd_calibrate)
 
-    sp = sub.add_parser("noise", help="record noise examples")
+    sp = sub.add_parser(parents=[common], name="noise", help="record noise examples")
     sp.add_argument("--seconds", type=int, default=30)
     sp.set_defaults(fn=cmd_noise)
 
-    sp = sub.add_parser("train", help="cross-validate and pick the model")
+    sp = sub.add_parser(parents=[common], name="train", help="cross-validate and pick the model")
     sp.set_defaults(fn=cmd_train)
 
-    sp = sub.add_parser("live", help="run zone actions on predicted taps")
+    sp = sub.add_parser(parents=[common], name="live", help="run zone actions on predicted taps")
     sp.add_argument("--enable-actions", action="store_true")
     sp.set_defaults(fn=cmd_live)
 
-    sp = sub.add_parser("status", help="JSON status")
+    sp = sub.add_parser(parents=[common], name="status", help="JSON status")
     sp.set_defaults(fn=cmd_status)
 
-    sp = sub.add_parser("sources", help="list sensors this machine exposes")
+    sp = sub.add_parser(parents=[common], name="sources", help="list sensors this machine exposes")
     sp.set_defaults(fn=cmd_sources)
 
-    sp = sub.add_parser("defaults", help="write default 2x2 actions to config")
+    sp = sub.add_parser(parents=[common], name="defaults", help="write default 2x2 actions to config")
     sp.set_defaults(fn=cmd_defaults)
 
-    sp = sub.add_parser("demo", help="full pipeline on a simulated laptop (no IMU needed)")
+    sp = sub.add_parser(parents=[common], name="demo", help="full pipeline on a simulated laptop (no IMU needed)")
     sp.add_argument("--fast", action="store_true", help="no real-time pacing")
     sp.add_argument("--rows", type=int, default=2)
     sp.add_argument("--cols", type=int, default=2)
@@ -290,6 +291,10 @@ def main():
     sp.set_defaults(fn=cmd_demo)
 
     args = p.parse_args()
+    if not hasattr(args, "data"):
+        args.data = default_data_dir()
+    if not hasattr(args, "source"):
+        args.source = "auto"
     args.fn(args)
 
 

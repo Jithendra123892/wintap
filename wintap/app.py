@@ -45,7 +45,7 @@ def _number(value, lo, hi, name):
 def _load_json(path):
     """Reads a JSON file; an unreadable one is moved aside instead of crashing start-up."""
     try:
-        return json.loads(path.read_text())
+        return json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         if path.exists():
             os.replace(path, path.with_suffix(path.suffix + f".corrupt-{int(time.time())}"))
@@ -56,7 +56,7 @@ def _atomic_write(path, text):
     """Owner-only (0600): config.json holds shell commands that run on a tap, and dataset.json your taps."""
     tmp = path.with_suffix(path.suffix + ".tmp")
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w") as f:
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
         f.write(text)
     os.chmod(tmp, 0o600)  # an older tmp file may still carry wider permissions
     os.replace(tmp, path)

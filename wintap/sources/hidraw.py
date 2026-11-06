@@ -3,7 +3,7 @@
 Use this when the IMU is not claimed by the Windows sensor driver (plain clamshells have no
 IMU at all; a ~$5 USB breakout gives any PC one at the full device rate, 100-1600 Hz).
 
-Experimental: pip install wintap[hid] (hidapi + hidparser). The report descriptor is parsed
+Experimental: pip install wintap[hid] (hidapi + hid-parser). The report descriptor is parsed
 with hidparser when available; otherwise a fixed int16 x3 accel + int16 x3 gyro layout is
 assumed (the common breakout format). Accel is scaled to g, gyro to deg/s.
 """
@@ -68,8 +68,12 @@ class HidRawSource(Source):
                     desc = None
         if desc:
             try:
-                import hidparser
-                parsed = hidparser.parse(desc) if hasattr(hidparser, "parse") else None
+                try:
+                    import hid_parser as hp  # PyPI: hid-parser
+                except ImportError:
+                    import hidparser as hp  # legacy name
+                rdesc = hp.ReportDescriptor(bytes(desc))
+                parsed = rdesc if hasattr(rdesc, "get_input_items") else None
                 if parsed is not None:
                     return self._parser_from_hidparser(parsed)
             except Exception:
