@@ -28,7 +28,8 @@ dependencies = [
 [project.optional-dependencies]
 winrt = ["winsdk>=1.0.0b10; sys_platform == 'win32'"]
 hid = ["hidapi>=0.14; sys_platform == 'win32'", "hid-parser>=0.1; sys_platform == 'win32'"]
-all = ["winsdk>=1.0.0b10; sys_platform == 'win32'", "hidapi>=0.14; sys_platform == 'win32'", "hid-parser>=0.1; sys_platform == 'win32'"]
+audio = ["sounddevice>=0.5"]
+all = ["winsdk>=1.0.0b10; sys_platform == 'win32'", "hidapi>=0.14; sys_platform == 'win32'", "hid-parser>=0.1; sys_platform == 'win32'", "sounddevice>=0.5"]
 dev = ["pytest>=8"]
 
 [project.scripts]

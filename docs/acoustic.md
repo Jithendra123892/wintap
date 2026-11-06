@@ -1,22 +1,37 @@
 # Acoustic fallback (lid knock via microphone)
 
-On machines with no IMU exposed to Windows, the lid tap is still audible: a
-short broadband knock on the lid shell couples into the built-in mic.
+Implemented as `wintap.sources.audio.AudioSource` (`--source audio`, also what `auto`
+picks when Windows exposes no motion sensor, which is most consumer laptops —
+WinRT `Accelerometer.get_default()` is None on machines without a sensor class device).
 
-Sketch of a fallback trigger (not wired in yet — contribution welcome):
+How it works:
 
-1. Record the default microphone (`Windows.Media.Capture.MediaCapture` or
-   `pycaw`/`sounddevice` loopback) at 16 kHz mono.
-2. Band-pass 1–6 kHz (the knock's energy band), compute short-time energy.
-3. Trigger when energy crosses `max(8x median, floor)` for 5–20 ms — the same
-   adaptive-threshold shape the gyro trigger uses.
-4. Feed the 200 ms audio window into the same feature extractor with the
-   gyro features zeroed, and train a separate model, or fuse with the gyro
-   model when both are available.
+1. The default microphone is recorded with `sounddevice` at the device sample rate,
+   split into 10 ms blocks; per block the high-frequency (1–6 kHz) energy of the left
+   and right mic-array channels is computed separately.
+2. The energy ratio between channels gives a left/right "pan" (this is what separates
+   left-half from right-half lid zones without an IMU); the energy vs. its running
+   median gives a pseudo-gyro magnitude with the same adaptive-threshold shape the
+   gyro trigger uses (noise ~0.5 deg/s, knock ~10 deg/s).
+3. The producer emits synthetic `gyro`/`accel` rows at 800 Hz, so `detector.py`,
+   `features.py`, `model.py` and the GUI run unchanged — one code path for IMU and mic.
+4. `wintap calibrate --source audio` plays a short panned knock through the speakers
+   (`_play`) so the user taps the matching lid zone; `wintap noise` records desk bumps
+   (also audible) as negatives. Both work exactly like the IMU flow.
 
-Desk bumps are also audible, so negatives recorded during `wintap noise`
-(while you bump the desk) transfer directly to the acoustic model.
+Hardware notes:
 
-Windows API notes: `MediaCapture` needs the `microphone` capability for
-packaged apps but **not** for unpackaged Python; `pycaw` (WASAPI loopback) can
-capture the mic without any permission prompt on Windows 10/11.
+- No admin, no capability, no permission prompt: plain WASAPI capture of the default
+  input endpoint from an unpackaged process.
+- `live=False` (used by `tests/test_audio.py`) skips the hardware and injects
+  synthetic knock/bump blocks into the producer, so the full calibrate -> noise ->
+  train -> live pipeline is tested on any machine, including CI runners with no
+  audio device.
+- On this dev VM, speaker->mic acoustic coupling and Stereo Mix loopback both capture
+  nothing, so the mic transducer path itself can only be validated on real hardware;
+  everything downstream of the mic is covered by the test.
+
+Windows API notes: `MediaCapture` would also work but needs the `microphone`
+capability for packaged apps; `sounddevice`/PortAudio needs nothing. `pycaw` WASAPI
+loopback can capture the mic without any prompt on Windows 10/11 (used for the
+`--loopback` capture option).

@@ -160,8 +160,9 @@ def cmd_sources(args):
     print(f"lid_open={inputmon._state.lid_open}")
     if not sources.winrt_sensor_present() and not sources.hid_sensor_present():
         print("no IMU exposed on this machine. Options:\n"
-              "  - `wintap demo`            run the full pipeline on a simulated laptop\n"
-              "  - `pip install wintap[hid]` + a USB IMU breakout (BMI160/BNO055) for real hardware\n"
+              "  - `--source audio`          mic knock detection (works on any laptop with a mic; auto picks it)\n"
+              "  - `wintap demo`             full pipeline on a simulated laptop\n"
+              "  - `pip install wintap[hid]` + a USB IMU breakout (BMI160/BNO055) for real IMU hardware\n"
               "  - on a 2-in-1/convertible/tablet the built-in sensor is picked up automatically")
 
 
@@ -241,7 +242,7 @@ def cmd_demo(args):
 def main():
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument("--data", default=argparse.SUPPRESS, help="data dir (config + calibration)")
-    common.add_argument("--source", default=argparse.SUPPRESS, help="auto|winrt|hid|synthetic|replay:FILE")
+    common.add_argument("--source", default=argparse.SUPPRESS, help="auto|winrt|hid|audio|synthetic|replay:FILE")
     p = argparse.ArgumentParser(prog="wintap", parents=[common],
                                 description="Zone taps on a Windows laptop lid from the built-in IMU. "
                                             "Based on LidTap by Yemcube.")

@@ -18,8 +18,17 @@ def hid_sensor_present():
         return False
 
 
+def audio_input_present():
+    try:
+        import sounddevice as sd
+        return any(d["max_input_channels"] > 0 for d in sd.query_devices())
+    except Exception:
+        return False
+
+
 def list_sources():
-    return {"winrt_sensor": winrt_sensor_present(), "hid_sensor": hid_sensor_present()}
+    return {"winrt_sensor": winrt_sensor_present(), "hid_sensor": hid_sensor_present(),
+            "audio_mic": audio_input_present()}
 
 
 def make_source(name="auto", **kw):
@@ -28,6 +37,8 @@ def make_source(name="auto", **kw):
             name = "winrt"
         elif hid_sensor_present():
             name = "hid"
+        elif audio_input_present():
+            name = "audio"  # no IMU exposed: fall back to mic knock detection
         else:
             name = "winrt"  # starts fine and reports a clear "no IMU" error in the UI
     if name == "winrt":
@@ -36,10 +47,14 @@ def make_source(name="auto", **kw):
     if name == "hid":
         from .hidraw import HidRawSource
         return HidRawSource(**kw)
+    if name == "audio":
+        from .audio import AudioSource
+        kw.setdefault("loopback", False)
+        return AudioSource(**kw)
     if name == "synthetic":
         from .synthetic import SyntheticSource
         return SyntheticSource(**kw)
     if name.startswith("replay:"):
         from .replay import ReplaySource
         return ReplaySource(name.split(":", 1)[1], **kw)
-    raise ValueError(f"unknown source {name!r}: auto|winrt|hid|synthetic|replay:FILE")
+    raise ValueError(f"unknown source {name!r}: auto|winrt|hid|audio|synthetic|replay:FILE")
