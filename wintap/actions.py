@@ -29,34 +29,30 @@ VK = {
 INPUT_KEYBOARD = 1
 KEYEVENTF_KEYUP = 0x0002
 
-if IS_WINDOWS:
-    _user32 = ctypes.windll.user32
+# ctypes structures are platform-neutral; only the SendInput call itself needs Windows.
+class KEYBDINPUT(ctypes.Structure):
+    _fields_ = [("wVk", wintypes.WORD), ("wScan", wintypes.WORD), ("dwFlags", wintypes.DWORD),
+                ("time", wintypes.DWORD), ("dwExtraInfo", ctypes.c_size_t)]
 
-    class KEYBDINPUT(ctypes.Structure):
-        _fields_ = [("wVk", wintypes.WORD), ("wScan", wintypes.WORD), ("dwFlags", wintypes.DWORD),
-                    ("time", wintypes.DWORD), ("dwExtraInfo", ctypes.c_size_t)]
+class MOUSEINPUT(ctypes.Structure):
+    _fields_ = [("dx", wintypes.LONG), ("dy", wintypes.LONG), ("mouseData", wintypes.DWORD),
+                ("dwFlags", wintypes.DWORD), ("time", wintypes.DWORD), ("dwExtraInfo", ctypes.c_size_t)]
 
-    class MOUSEINPUT(ctypes.Structure):
-        _fields_ = [("dx", wintypes.LONG), ("dy", wintypes.LONG), ("mouseData", wintypes.DWORD),
-                    ("dwFlags", wintypes.DWORD), ("time", wintypes.DWORD), ("dwExtraInfo", ctypes.c_size_t)]
+class HARDWAREINPUT(ctypes.Structure):
+    _fields_ = [("uMsg", wintypes.DWORD), ("wParamL", wintypes.WORD), ("wParamH", wintypes.WORD)]
 
-    class HARDWAREINPUT(ctypes.Structure):
-        _fields_ = [("uMsg", wintypes.DWORD), ("wParamL", wintypes.WORD), ("wParamH", wintypes.WORD)]
+class _INPUT_UNION(ctypes.Union):
+    _fields_ = [("mi", MOUSEINPUT), ("ki", KEYBDINPUT), ("hi", HARDWAREINPUT)]
 
-    class _INPUT_UNION(ctypes.Union):
-        _fields_ = [("mi", MOUSEINPUT), ("ki", KEYBDINPUT), ("hi", HARDWAREINPUT)]
+class INPUT(ctypes.Structure):
+    _anonymous_ = ("u",)
+    _fields_ = [("type", wintypes.DWORD), ("u", _INPUT_UNION)]
 
-    class INPUT(ctypes.Structure):
-        _anonymous_ = ("u",)
-        _fields_ = [("type", wintypes.DWORD), ("u", _INPUT_UNION)]
 
-    def _send_input(arr, count):
-        return _user32.SendInput(count, arr, ctypes.sizeof(INPUT))
-else:
-    INPUT = None
-
-    def _send_input(arr, count):
-        return 0
+def _send_input(arr, count):
+    if IS_WINDOWS:
+        return ctypes.windll.user32.SendInput(count, arr, ctypes.sizeof(INPUT))
+    return 0
 
 
 def _key(vk, up=False):
