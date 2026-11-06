@@ -12,6 +12,9 @@ Config maps a zone label (z0..zN) to an action string. An action is one of:
   anything else                      run as a shell command ({zone} -> zone number)
 
 Keys are sent with SendInput. `sender` and `dry_run` exist for tests and --dry-run.
+
+Touch actions (lid as touchscreen): `tap` left-clicks at the tapped zone's center on
+the screen, `click:fx,fy` / `move:fx,fy` target explicit screen fractions.
 """
 import ctypes
 import subprocess
@@ -27,7 +30,12 @@ VK = {
 }
 
 INPUT_KEYBOARD = 1
+INPUT_MOUSE = 0
 KEYEVENTF_KEYUP = 0x0002
+MOUSEEVENTF_MOVE = 0x0001
+MOUSEEVENTF_LEFTDOWN = 0x0002
+MOUSEEVENTF_LEFTUP = 0x0004
+MOUSEEVENTF_ABSOLUTE = 0x8000
 
 # ctypes structures are platform-neutral; only the SendInput call itself needs Windows.
 class KEYBDINPUT(ctypes.Structure):
@@ -71,6 +79,46 @@ def send_keys(vks, sender=None):
         arr[i] = _key(vk)
         arr[2 * n - 1 - i] = _key(vk, up=True)
     return send(arr, 2 * n)
+
+
+def screen_size():
+    """Primary screen pixel size (SM_CXSCREEN=0, SM_CYSCREEN=1); sane fallback off-Windows."""
+    if IS_WINDOWS:
+        u = ctypes.windll.user32
+        return u.GetSystemMetrics(0), u.GetSystemMetrics(1)
+    return 1920, 1080
+
+
+def _mouse_abs(x_px, y_px, flags):
+    w, h = screen_size()
+    inp = INPUT()
+    inp.type = INPUT_MOUSE
+    inp.mi = MOUSEINPUT(int(x_px / w * 65535), int(y_px / h * 65535), 0, flags, 0, 0)
+    return inp
+
+
+def tap_screen(fx, fy, sender=None, click=True):
+    """Move the cursor to fraction (fx, fy) of the screen and optionally left-click.
+
+    This is what turns the lid into a touchscreen: a lid zone maps to the same
+    relative spot on the display, so knocking the lid 'touches' the screen there.
+    """
+    send = sender or _send_input
+    w, h = screen_size()
+    moves = [_mouse_abs(fx * w, fy * h, MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE)]
+    if click:
+        moves += [_mouse_abs(fx * w, fy * h, MOUSEEVENTF_LEFTDOWN),
+                  _mouse_abs(fx * w, fy * h, MOUSEEVENTF_LEFTUP)]
+    arr = (INPUT * len(moves))()
+    for i, m in enumerate(moves):
+        arr[i] = m
+    return send(arr, len(moves))
+
+
+def zone_center(zone, rows, cols):
+    """Center of zone `zone` in a rows x cols lid grid, as screen fractions (fx, fy)."""
+    r, c = divmod(zone, cols)
+    return (c + 0.5) / cols, (r + 0.5) / rows
 
 
 def _mute_all_mics():
@@ -126,13 +174,33 @@ BUILTINS = {
 _DEVNULL = subprocess.DEVNULL
 
 
-def run_action(spec, zone=None, sender=None, dry_run=False):
-    """Run one configured action; returns a description string (or None for empty spec)."""
+def run_action(spec, zone=None, sender=None, dry_run=False, grid=None):
+    """Run one configured action; returns a description string (or None for empty spec).
+
+    spec may be a builtin name, "open:<program>", a shell command, or a touch action:
+      tap            -> left-click at this zone's center on the screen (lid = touchscreen)
+      click:fx,fy    -> left-click at screen fraction (fx, fy)
+      move:fx,fy     -> move cursor to screen fraction without clicking
+    """
     spec = (spec or "").strip()
     if not spec:
         return None
     if zone is not None and "{zone}" in spec:
         spec = spec.replace("{zone}", str(zone + 1))
+    if spec == "tap":
+        fx, fy = zone_center(zone or 0, grid["rows"], grid["cols"]) if grid else (0.5, 0.5)
+        if not dry_run:
+            tap_screen(fx, fy, sender)
+        return f"tap@({fx:.2f},{fy:.2f})"
+    for prefix, click in (("click:", True), ("move:", False)):
+        if spec.startswith(prefix):
+            try:
+                fx, fy = (float(v) for v in spec[len(prefix):].split(",")[:2])
+            except ValueError:
+                return None
+            if not dry_run:
+                tap_screen(min(max(fx, 0.0), 1.0), min(max(fy, 0.0), 1.0), sender, click=click)
+            return f"{'click' if click else 'move'}@({fx:.2f},{fy:.2f})"
     if spec in BUILTINS:
         if not dry_run:
             BUILTINS[spec](sender)

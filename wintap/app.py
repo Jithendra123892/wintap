@@ -166,7 +166,7 @@ class App:
         if not cmd or i is None:
             return None
         return actions.run_action(cmd, zone=i, sender=self._action_sender,
-                                  dry_run=self._dry_run_actions)
+                                  dry_run=self._dry_run_actions, grid=self.grid)
 
     def events_since(self, eid):
         with self.lock:

@@ -173,6 +173,14 @@ def cmd_defaults(args):
     print("default 2x2 actions written to config: z0=desktop_left z1=desktop_right z2=play_pause z3=privacy_guard")
 
 
+def cmd_touch(args):
+    app = build_app(args)
+    rows, cols = max(1, min(6, args.rows)), max(1, min(6, args.cols))
+    app.set_config({"actions": {f"z{i}": "tap" for i in range(rows * cols)}, "actions_enabled": True})
+    print(f"touchscreen mode: {rows}x{cols} lid zones now tap the same spots on the screen "
+          f"(actions_enabled=true). Calibrate that grid, train, then `wintap live --enable-actions`.")
+
+
 def print_report(rep):
     print(f"samples={rep['n']} grid={rep['grid']['rows']}x{rep['grid']['cols']} best={rep['best']}")
     for r in rep["models"]:
@@ -283,6 +291,11 @@ def main():
 
     sp = sub.add_parser(parents=[common], name="defaults", help="write default 2x2 actions to config")
     sp.set_defaults(fn=cmd_defaults)
+
+    sp = sub.add_parser(parents=[common], name="touch", help="map every lid zone to a screen tap (lid as touchscreen)")
+    sp.add_argument("--rows", type=int, default=3)
+    sp.add_argument("--cols", type=int, default=3)
+    sp.set_defaults(fn=cmd_touch)
 
     sp = sub.add_parser(parents=[common], name="demo", help="full pipeline on a simulated laptop (no IMU needed)")
     sp.add_argument("--fast", action="store_true", help="no real-time pacing")

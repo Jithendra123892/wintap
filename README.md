@@ -74,10 +74,20 @@ python -m wintap calibrate --rows 2 --cols 2 --per-zone 10
 python -m wintap noise --seconds 20
 python -m wintap train
 python -m wintap live --enable-actions   :: actions fire on tap (dry-run without the flag)
+python -m wintap touch --rows 3 --cols 3 :: lid becomes a touchscreen: every zone taps the same spot on the display
 python -m wintap status
 ```
 
 Data (config, dataset, model) lives in `%LOCALAPPDATA%\WinTap`.
+
+## Touchscreen mode
+
+Lid zones map onto the screen: a knock on a lid zone left-clicks the same relative
+spot on the display (`tap` action; `click:fx,fy` / `move:fx,fy` for explicit screen
+fractions). So `wintap touch --rows 3 --cols 3`, calibrate the 3x3 grid, train, then
+`wintap live --enable-actions` gives you a 9-button touchscreen on the lid. Other
+actions per zone: `play_pause`, `next_track`, `volume_up`, `desktop_left`, `lock`,
+`privacy_guard`, `open:<program>`, or any shell command (`{zone}` = zone number).
 
 ## Web UI
 
