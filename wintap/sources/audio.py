@@ -141,7 +141,7 @@ class AudioSource(Source):
                 el = er = 1e-9
             e = 0.5 * (el + er)
             hist.append(e)
-            if len(hist) > 200:
+            if len(hist) > 40:  # 0.4 s floor: sustained noise (typing) raises it, impulsive knocks still spike
                 hist.pop(0)
             med = sorted(hist)[len(hist) // 2] if hist else 1e-9
             accel_div = 8.0

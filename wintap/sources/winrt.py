@@ -57,3 +57,11 @@ class WinRTSource(Source):
             self.error = ("no accelerometer/gyroscope exposed by Windows on this machine "
                           "(common on plain clamshells). Options: pip install wintap[hid] and plug in a "
                           "USB IMU, or run `wintap demo` to see the pipeline on a simulated laptop.")
+
+    def stop(self):
+        for dev, handler in self._keep:
+            try:
+                dev.remove_reading_changed(handler)
+            except Exception:
+                pass
+        self._keep.clear()

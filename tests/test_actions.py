@@ -117,6 +117,28 @@ class TouchActionTests(unittest.TestCase):
         self.assertIsNone(actions.run_action("click:abc", sender=rec))
         self.assertEqual(rec.calls, [])
 
+    def test_tap_prefers_continuous_pos_over_zone_center(self):
+        rec = MouseRecorder()
+        desc = actions.run_action("tap", zone=0, grid={"rows": 1, "cols": 2},
+                                  sender=rec, pos=(0.12, 0.50))
+        self.assertEqual(desc, "tap@(0.12,0.50)")
+        evs = rec.calls[0]
+        self.assertEqual(evs[0][1], int(0.12 * 65535))
+
+    def test_tap_pos_is_clamped(self):
+        rec = MouseRecorder()
+        actions.run_action("tap", zone=0, grid={"rows": 1, "cols": 2}, sender=rec, pos=(1.7, -0.4))
+        evs = rec.calls[0]
+        self.assertEqual(evs[0][1], 65535)
+        self.assertEqual(evs[0][2], 0)
+
+
+class DefaultsTests(unittest.TestCase):
+    def test_gating_on_with_roomy_gate_s(self):
+        from wintap.app import DEFAULT_CFG
+        self.assertTrue(DEFAULT_CFG["gating"])
+        self.assertGreaterEqual(DEFAULT_CFG["gate_s"], 0.8)  # typing must not trigger taps
+
 
 if __name__ == "__main__":
     unittest.main()

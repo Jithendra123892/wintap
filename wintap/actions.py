@@ -174,11 +174,12 @@ BUILTINS = {
 _DEVNULL = subprocess.DEVNULL
 
 
-def run_action(spec, zone=None, sender=None, dry_run=False, grid=None):
+def run_action(spec, zone=None, sender=None, dry_run=False, grid=None, pos=None):
     """Run one configured action; returns a description string (or None for empty spec).
 
     spec may be a builtin name, "open:<program>", a shell command, or a touch action:
-      tap            -> left-click at this zone's center on the screen (lid = touchscreen)
+      tap            -> left-click at the tapped spot on the screen (lid = touchscreen);
+                        uses `pos` (screen fractions) when given, else the zone center
       click:fx,fy    -> left-click at screen fraction (fx, fy)
       move:fx,fy     -> move cursor to screen fraction without clicking
     """
@@ -188,7 +189,12 @@ def run_action(spec, zone=None, sender=None, dry_run=False, grid=None):
     if zone is not None and "{zone}" in spec:
         spec = spec.replace("{zone}", str(zone + 1))
     if spec == "tap":
-        fx, fy = zone_center(zone or 0, grid["rows"], grid["cols"]) if grid else (0.5, 0.5)
+        if pos is not None:
+            fx, fy = min(max(float(pos[0]), 0.0), 1.0), min(max(float(pos[1]), 0.0), 1.0)
+        elif grid:
+            fx, fy = zone_center(zone or 0, grid["rows"], grid["cols"])
+        else:
+            fx, fy = 0.5, 0.5
         if not dry_run:
             tap_screen(fx, fy, sender)
         return f"tap@({fx:.2f},{fy:.2f})"

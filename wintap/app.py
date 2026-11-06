@@ -20,7 +20,7 @@ DEFAULT_CFG = {
     "k": 6.0,             # trigger at k x idle gyro noise ...
     "min_thresh": 1.0,    # ... but never below this many deg/s
     "refractory": 0.35,   # s between taps
-    "gate_s": 0.3,        # ignore taps this soon after typing / clicking / scrolling
+    "gate_s": 0.8,           # ignore taps this soon after typing / clicking / scrolling
     "gating": True,
     "reject_factor": 2.0,  # reject taps this many times farther than usual from their zone
     "model_kind": "auto",
@@ -145,7 +145,7 @@ class App:
                 ev["pred"] = pred
                 ev["outcome"] = "rejected" if pred["rejected"] else "predicted"
                 if not pred["rejected"] and self.cfg["actions_enabled"]:
-                    ev["action"] = self._run_action(pred["label"])
+                    ev["action"] = self._run_action(pred["label"], ev)
             else:
                 ev["outcome"] = "detected"
             self.events.append(ev)
@@ -159,14 +159,32 @@ class App:
         ev["sample_id"] = s["id"]
         self.save_dataset()
 
-    def _run_action(self, label):
+    def _run_action(self, label, ev=None):
         from . import actions
         cmd = self.cfg["actions"].get(label, "").strip()
         i = model.zone_index(label)
         if not cmd or i is None:
             return None
+        pos = None
+        if ev is not None and cmd == "tap" and ev.get("g"):
+            # continuous tap position: mic gives left/right pan; an IMU gyro vector gives 2D
+            kind = getattr(getattr(self.sensors, "_source", None), "kind", "")
+            g = np.array(ev["g"], dtype=float)
+            if len(g) == 0:
+                g = None
+            if g is not None:
+                pk = max(ev.get("peak_g", 0.0), 1e-6)
+                if kind == "audio":
+                    denom = 0.55 * float(np.abs(g[:, 1]).mean()) or 1e-9
+                    pan = max(-1.0, min(1.0, float(g[:, 0].mean()) / denom))
+                    r, c = divmod(i, self.grid["cols"])
+                    pos = ((pan + 1.0) / 2.0, (r + 0.5) / self.grid["rows"])
+                else:  # winrt / hid IMU: gyro x = left/right, z = front/back of the lid
+                    fx = 0.5 + max(-1.0, min(1.0, float(g[:, 0].mean()) / pk))
+                    fy = 0.5 - max(-1.0, min(1.0, float(g[:, 2].mean()) / pk))
+                    pos = (fx, fy)
         return actions.run_action(cmd, zone=i, sender=self._action_sender,
-                                  dry_run=self._dry_run_actions, grid=self.grid)
+                                  dry_run=self._dry_run_actions, grid=self.grid, pos=pos)
 
     def events_since(self, eid):
         with self.lock:
