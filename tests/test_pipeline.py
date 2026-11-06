@@ -69,13 +69,18 @@ class PipelineTests(unittest.TestCase):
         src.set_bumps(False)
         app.calibrate_start({"rows": 2, "cols": 2, "per_zone": 12, "block": 2})
         self.assertTrue(drive_calibration(app, src, 2, 2), "calibration did not finish")
-        # noise examples: simulated desk bumps for ~3 s of wall time
-        app.negatives_start({"seconds": 3})
+        # noise examples: simulated desk bumps, collected by COUNT (fast-forward speed
+        # is machine-dependent, so wall-clock windows record a variable number)
+        app.negatives_start({"seconds": 90})
         src.set_bumps(True)
-        deadline = time.monotonic() + 40
-        while time.monotonic() < deadline and app.status()["mode"] == "negatives":
+        deadline = time.monotonic() + 90
+        while time.monotonic() < deadline:
+            n_noise = sum(1 for s in app.samples if s["label"] == "noise")
+            if n_noise >= 10 or app.status()["mode"] != "negatives":
+                break
             time.sleep(0.05)
         src.set_bumps(False)
+        app.stop()
         report = app.train()
         # live: 2 fresh taps per zone, measured against their true label.
         # Request the next tap only after the previous one produced a prediction,
@@ -129,25 +134,35 @@ class PipelineTests(unittest.TestCase):
         app = App(Path(tmp.name) / "data", source=src)
         app.start()
         src.set_bumps(False)
-        app.calibrate_start({"rows": 2, "cols": 2, "per_zone": 6, "block": 2})
+        app.calibrate_start({"rows": 2, "cols": 2, "per_zone": 8, "block": 2})
         self.assertTrue(drive_calibration(app, src, 2, 2))
-        app.negatives_start({"seconds": 2})
+        # collect negatives by COUNT, not wall time: in fast-forward mode the number of
+        # bumps recorded per wall second depends on machine speed (CI runners differ)
+        app.negatives_start({"seconds": 90})
         src.set_bumps(True)
-        deadline = time.monotonic() + 30
-        while time.monotonic() < deadline and app.status()["mode"] == "negatives":
+        deadline = time.monotonic() + 90
+        while time.monotonic() < deadline:
+            n_noise = sum(1 for s in app.samples if s["label"] == "noise")
+            if n_noise >= 10 or app.status()["mode"] != "negatives":
+                break
             time.sleep(0.05)
+        src.set_bumps(False)
+        app.stop()
+        self.assertGreaterEqual(sum(1 for s in app.samples if s["label"] == "noise"), 10,
+                                "too few noise examples recorded")
         app.train()
         m = app.model
         self.assertIsNotNone(m)
-        # a fresh desk bump (accel-dominated, small gyro) must classify as noise or be rejected
+        # a fresh desk bump: modest gyro, accel-dominated (taps are gyro-dominated) ->
+        # must classify as noise or be open-set rejected
         g = np.zeros((N, 3))
         a = np.zeros((N, 3))
         for i in range(N):
             x = i / FS
             if x < 0.12:
                 e = math.exp(-x / 0.03)
-                g[i] = [2.0 * e * math.sin(2 * math.pi * 30.0 * x)] * 3
-                a[i] = [0.0, 0.0, 0.5 * e]
+                g[i] = [1.1 * e * math.sin(2 * math.pi * 30.0 * x)] * 3
+                a[i] = [0.6 * e, 0.0, 0.5 * e]
         pred = m.predict(features.extract(g, a), reject_factor=2.0)
         self.assertTrue(pred["rejected"] or pred["label"] == model.NOISE, pred)
         tmp.cleanup()
