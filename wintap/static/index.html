@@ -4,12 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="token" content="{{TOKEN}}">
-<title>LidTap</title>
+<title>Wintap</title>
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
 <header>
-  <div class="brand">LidTap <span>zone taps from the hinge gyro</span></div>
+  <div class="brand">Wintap <span>zone taps from the hinge gyro</span></div>
   <div class="pills" id="pills">
     <span class="pill" id="pSensors">Sensors …</span>
     <span class="pill" id="pLid">Lid –</span>
@@ -23,7 +23,8 @@
   <button data-tab="monitor" class="on">1 · Monitor</button>
   <button data-tab="calibrate">2 · Calibrate</button>
   <button data-tab="model">3 · Model</button>
-  <button data-tab="live">4 · Live</button>
+  <button data-tab="features">4 · Features</button>
+  <button data-tab="live">5 · Live</button>
 </nav>
 <div id="banner" class="banner" hidden></div>
 
@@ -85,7 +86,7 @@
       </div>
       <p class="hint">Zones are visited in shuffled blocks so drift spreads evenly. Calibration resumes where you left off; the model retrains when it finishes.</p>
       <h3>Not-a-tap examples</h3>
-      <p class="hint">Record 30 s of things that should <b>not</b> count: desk knocks, adjusting the lid, picking the laptop up. They become a “noise” class the model learns to reject.</p>
+      <p class="hint">Record 30 s of things that should <b>not</b> count: desk knocks, adjusting the lid, picking the laptop up. They become a "noise" class the model learns to reject.</p>
       <div class="btns">
         <button id="negStart">Record 30 s of noise</button>
       </div>
@@ -145,6 +146,45 @@
     <h2>Zone signatures</h2>
     <p class="hint">Average strength-normalised gyro twist per zone (x, y, z). Physics predicts left vs right flips the sign of one axis, top vs bottom changes the ratios.</p>
     <div id="sigs" class="sigs"></div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section id="features" class="tab">
+  <div class="cols">
+    <div class="card grow">
+      <div class="card-h"><h2>Feature Overview</h2></div>
+      <p class="hint">Wintap extracts <b id="nFeatures">188</b> features per tap. Toggle features below to enable/disable them.</p>
+
+      <h3>Core Features</h3>
+      <div id="coreFeatures" class="feature-group"></div>
+
+      <h3>Spectral Features</h3>
+      <div id="spectralFeatures" class="feature-group"></div>
+
+      <h3>Template Features</h3>
+      <div id="templateFeatures" class="feature-group"></div>
+
+      <div class="btns">
+        <button id="resetFeatures" class="ghost">Reset to Default</button>
+        <button id="saveFeatures" class="primary">Save Feature Settings</button>
+      </div>
+    </div>
+
+    <div class="card side">
+      <h2>Last Tap Features</h2>
+      <canvas id="featureChart" class="pca"></canvas>
+      <div class="legend" id="featureLegend"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Version & Gestures</h2>
+    <div class="btns">
+      <button id="versionBtn" class="primary">Show Version</button>
+    </div>
+    <p class="hint">Gestures: double_tap (rapid tap), swipe_left/right (drag on lid)</p>
+    <div id="versionInfo" class="muted" style="margin-top: 8px;"></div>
   </div>
 </section>
 

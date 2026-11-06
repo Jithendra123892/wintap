@@ -4,7 +4,39 @@ const $ = (s) => document.querySelector(s);
 const PAGE_LOADED = Date.now() / 1000;
 const FS = 800, TRIG = 24;
 
-const S = { status: null, report: null, rows: [], thr: [], taps: [], paused: false, pausedEnd: 0, cfgSynced: false };
+// Feature definitions loaded from API
+let FEATURE_CATEGORIES = {
+  "core": [
+    { name: "twist_direction", label: "Twist Direction", desc: "Gyro twist at peak" },
+    { name: "early_rotation", label: "Early Rotation", desc: "Net early rotation per axis" },
+    { name: "gyro_energy", label: "Gyro Energy Split", desc: "How twist energy splits across axes" },
+    { name: "shake_direction", label: "Shake Direction", desc: "Accel shake direction at peak" },
+    { name: "accel_energy", label: "Accel Energy Split", desc: "How shake energy splits across axes" },
+    { name: "twist_shake_ratio", label: "Twist/Shake Ratio", desc: "Twist per unit shake" },
+    { name: "tap_strength", label: "Tap Strength", desc: "log(gyro peak)" },
+    { name: "decay_time", label: "Decay Time", desc: "Signal decay time normalized" },
+  ],
+  "spectral": [
+    { name: "spectral_band_0", label: "Band 0-40Hz", desc: "Low frequency energy" },
+    { name: "spectral_band_1", label: "Band 40-80Hz", desc: "Mid-low frequency energy" },
+    { name: "spectral_band_2", label: "Band 80-160Hz", desc: "Mid frequency energy" },
+    { name: "spectral_band_3", label: "Band 160-400Hz", desc: "High frequency energy" },
+    { name: "spectral_band_4", label: "Band 0-20Hz", desc: "Very low frequency" },
+    { name: "spectral_band_5", label: "Band 20-40Hz", desc: "Sub low frequency" },
+    { name: "spectral_band_6", label: "Band 120-160Hz", desc: "Upper mid frequency" },
+    { name: "spectral_band_7", label: "Band 160-200Hz", desc: "High-mid frequency" },
+    { name: "spectral_band_8", label: "Band 200-300Hz", desc: "Upper frequency" },
+    { name: "spectral_band_9", label: "Band 300-400Hz", desc: "Very high frequency" },
+    { name: "spectrogram_peak_1", label: "Spec Peak 1", desc: "Spectrogram max 1" },
+    { name: "spectrogram_peak_2", label: "Spec Peak 2", desc: "Spectrogram max 2" },
+  ],
+  "template": [
+    { name: "gyro_template", label: "Gyro Template", desc: "Gyro waveform template (48 values)" },
+    { name: "combined_template", label: "Combined Template", desc: "Gyro+accel combined (96 values)" },
+  ],
+};
+
+const S = { status: null, report: null, rows: [], thr: [], taps: [], paused: false, pausedEnd: 0, cfgSynced: false, features: {}, enabledFeatures: [] };
 
 async function api(cmd, body = {}) {
   const r = await fetch("/api/" + cmd, {
@@ -17,9 +49,21 @@ async function api(cmd, body = {}) {
   return j;
 }
 
+async function fetchFeatures() {
+  try {
+    const r = await fetch("/api/features");
+    const j = await r.json();
+    S.enabledFeatures = j.enabled || [];
+    return j;
+  } catch (e) {
+    console.error("Failed to fetch features:", e);
+    return { categories: {}, all_features: [], enabled: [], count: 0 };
+  }
+}
+
 const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 const COL = {};
-for (const k of ["x", "y", "z", "mag", "thr", "good", "accent", "warn", "gate", "line", "muted", "text", "bad"]) COL[k] = css("--" + k);
+for (const k of ["x", "y", "z", "mag", "thr", "good", "accent", "warn", "bad", "gate", "line", "muted", "text"]) COL[k] = css("--" + k);
 const AXES = [COL.x, COL.y, COL.z];
 const OUTCOME_COLOR = { predicted: COL.good, recorded: COL.accent, rejected: COL.warn, gated: COL.gate, detected: COL.text };
 
@@ -51,22 +95,8 @@ for (const b of document.querySelectorAll("#tabs button")) {
     document.querySelectorAll("#tabs button").forEach((x) => x.classList.toggle("on", x === b));
     document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("on", t.id === b.dataset.tab));
     if (b.dataset.tab === "model") renderReport();
+    if (b.dataset.tab === "features") renderFeatures();
   };
-}
-
-// ---------------------------------------------------------------- stream
-function connect() {
-  const es = new EventSource("/stream");
-  es.addEventListener("samples", (e) => {
-    const m = JSON.parse(e.data);
-    for (const r of m.rows) S.rows.push(r);
-    if (m.rows.length) S.thr.push([m.rows[m.rows.length - 1][0], m.thr]);
-    if (S.rows.length > 6000) S.rows = S.rows.slice(-4000);
-    if (S.thr.length > 1500) S.thr = S.thr.slice(-1000);
-  });
-  es.addEventListener("tap", (e) => onTap(JSON.parse(e.data)));
-  es.addEventListener("status", (e) => onStatus(JSON.parse(e.data)));
-  es.onerror = () => { $("#pSensors").textContent = "Disconnected"; $("#pSensors").className = "pill bad"; };
 }
 
 // ---------------------------------------------------------------- scope
@@ -423,7 +453,7 @@ function drawLearning(pts) {
   const maxN = pts.length ? pts[pts.length - 1].n : 10;
   const X = (n) => L + (n / maxN) * (w - L - R), Y = (a) => T + (1 - a) * (h - T - B);
   c.strokeStyle = COL.line; c.fillStyle = COL.muted;
-  for (const a of [0, 0.25, 0.5, 0.75, 1]) {
+  for (let a of [0, 0.25, 0.5, 0.75, 1]) {
     c.beginPath(); c.moveTo(L, Y(a)); c.lineTo(w - R, Y(a)); c.stroke(); c.fillText(a * 100 + "%", 2, Y(a) + 4);
   }
   c.fillText("x: taps per zone", w - 92, T + 22);
@@ -500,6 +530,107 @@ function renderSignatures(rep) {
   }
 }
 
+// ---------------------------------------------------------------- features tab
+async function renderFeatures() {
+  const data = await fetchFeatures();
+  S.categories = data.categories || FEATURE_CATEGORIES;
+  S.allFeatures = data.all_features || [];
+  S.enabledFeatures = data.enabled || [];
+
+  // Render core features
+  const coreGroup = $("#coreFeatures");
+  let idx = 0;
+  for (const [catName, features] of Object.entries(S.categories)) {
+    const group = document.getElementById(catName + "Features");
+    if (!group) continue;
+    group.innerHTML = features.map((f) => {
+      const enabled = S.enabledFeatures.includes(f.name);
+      return `
+    <label class="check" style="margin: 4px 0;">
+      <input type="checkbox" data-feature="${f.name}" ${enabled ? "checked" : ""}>
+      <span>${f.label}</span> <span class="muted" style="font-size:11px">(${f.desc})</span>
+    </label>
+      `;
+    }).join("");
+
+    // Add event listeners for checkboxes
+    group.querySelectorAll("input[type=checkbox]").forEach(cb => {
+      cb.onchange = () => {
+        const name = cb.dataset.feature;
+        if (cb.checked) {
+          if (!S.enabledFeatures.includes(name)) S.enabledFeatures.push(name);
+        } else {
+          const i = S.enabledFeatures.indexOf(name);
+          if (i >= 0) S.enabledFeatures.splice(i, 1);
+        }
+        renderFeatures(); // Re-render to update count
+      };
+    });
+  }
+
+  // Update count
+  const enabledCount = document.querySelectorAll("#features input:checked").length;
+  $("#nFeatures").textContent = enabledCount;
+}
+
+// ---------------------------------------------------------------- feature chart
+function drawFeatureChart() {
+  if (!S.lastTap || !$("#features").classList.contains("on")) return;
+  const [c, w, h] = canvas2d($("#featureChart"));
+  c.fillStyle = COL.bg;
+  c.fillRect(0, 0, w, h);
+
+  // Draw feature bar chart for last tap
+  const f = S.lastTap.f || [];
+  if (!f.length) return;
+
+  const barW = w / Math.max(f.length, 1);
+  for (let i = 0; i < f.length; i++) {
+    const val = (f[i] + 0.5) * 100; // normalize -0.5..0.5 to 0..100
+    const barH = Math.min(200, Math.abs(val) * 80);
+    const color = val > 0 ? COL.good : COL.warn;
+
+    c.fillStyle = color;
+    c.fillRect(i * barW + 4, h - 18 - barH, barW - 8, barH);
+
+    // Add labels for key features
+    if ([0, 6, 7, 12].includes(i)) {
+      c.fillStyle = COL.text;
+      c.font = "10px monospace";
+      c.fillText(i, i * barW + barW/2 - 3, h - 4);
+    }
+  }
+
+  // Update legend
+  const legend = $("#featureLegend");
+  legend.innerHTML = `
+    <span><i style="background:${COL.good}"></i> Positive value</span>
+    <span><i style="background:${COL.warn}"></i> Negative value</span>
+  `;
+}
+
+// ---------------------------------------------------------------- version button
+$("#versionBtn").onclick = () => {
+  api("version", {}).then((j) => {
+    $("#versionInfo").textContent = `wintap version ${j.version || "0.1.0"}`;
+  });
+};
+
+// ---------------------------------------------------------------- reset/save features
+$("#resetFeatures").onclick = () => {
+  document.querySelectorAll("#features input").forEach(cb => cb.checked = true);
+  renderFeatures();
+};
+
+$("#saveFeatures").onclick = () => {
+  const enabled = [];
+  document.querySelectorAll("#features input").forEach(cb => {
+    if (cb.checked) enabled.push(cb.dataset.feature);
+  });
+  api("config", { enabled_features: enabled });
+  alert(`Saved ${enabled.length} enabled features`);
+};
+
 // ---------------------------------------------------------------- boot
 (async () => {
   const r = await fetch("/api/state");
@@ -507,6 +638,7 @@ function renderSignatures(rep) {
   onStatus(j.status);
   S.report = j.report;
   renderReport();
+  renderFeatures();
   connect();
   requestAnimationFrame(drawScope);
   window.addEventListener("resize", () => { if (S.lastTap) drawTap(S.lastTap); if ($("#model").classList.contains("on")) renderReport(); });

@@ -67,6 +67,23 @@ class Handler(BaseHTTPRequestHandler):
             return self._stream()
         if path == "/api/state":
             return self._send(200, {"status": self.app.status(), "report": self.app.report})
+        if path == "/api/features":
+            from .features import FEATURE_CATEGORIES
+            all_features = []
+            for cat, features in FEATURE_CATEGORIES.items():
+                for f in features:
+                    all_features.append(f["name"])
+            cfg = self.app.cfg
+            enabled = cfg.get("enabled_features", [])
+            if not enabled:
+                enabled = all_features
+            features_data = {
+                "categories": FEATURE_CATEGORIES,
+                "all_features": all_features,
+                "enabled": enabled,
+                "count": len(enabled),
+            }
+            return self._send(200, features_data)
         self._send(404, {"error": "not found"})
 
     def do_POST(self):
@@ -101,6 +118,9 @@ class Handler(BaseHTTPRequestHandler):
         }
         if cmd not in handlers:
             return self._send(404, {"error": "unknown command"})
+        if cmd == "version":
+            from . import __version__
+            return self._send(200, {"version": __version__})
         try:
             handlers[cmd]()
         except (ValueError, KeyError) as e:

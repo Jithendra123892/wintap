@@ -72,7 +72,7 @@ class AppConfigTests(unittest.TestCase):
         app2 = make_app(self.tmp.name)
         self.assertEqual(app2.cfg["actions"], {"z0": "lock"})
         self.assertEqual(len(app2.samples), 1)
-        self.assertEqual(app2.samples[0]["f"].shape[0], 70)
+        self.assertEqual(app2.samples[0]["f"].shape[0], 188)
 
 
 if __name__ == "__main__":

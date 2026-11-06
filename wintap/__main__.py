@@ -10,8 +10,11 @@
   wintap demo [--fast]             full pipeline on a simulated laptop (no IMU needed)
   wintap sources                   what sensors this machine exposes
   wintap defaults                  write the default 2x2 zone actions into the config
+  wintap features [options]        manage feature toggles (--list, --enable, --disable, --reset, --status)
+  wintap quickstart [options]      interactive setup wizard (--rows, --cols, --per-zone)
+  wintap version                   show version
 
-Global: --data DIR (default %LOCALAPPDATA%\\WinTap), --source auto|winrt|hid|synthetic|replay:FILE
+Global: --data DIR (default %LOCALAPPDATA%\\WinTap), --source auto|winrt|hid|audio|synthetic|replay:FILE
 """
 import argparse
 import json
@@ -173,6 +176,171 @@ def cmd_defaults(args):
     print("default 2x2 actions written to config: z0=desktop_left z1=desktop_right z2=play_pause z3=privacy_guard")
 
 
+def cmd_version(args):
+    from . import __version__
+    print(f"wintap {__version__}")
+
+
+def cmd_features(args):
+    """Manage feature toggles for tap detection.
+
+    Usage:
+      wintap features --list              # list all features
+      wintap features --enable N M        # enable features N, M
+      wintap features --disable N M        # disable features N, M
+      wintap features --reset             # reset to defaults
+      wintap features --status            # show enabled/disabled status
+    """
+    app = build_app(args)
+    cfg = app.cfg
+
+    # Import feature definitions
+    from .features import FEATURE_CATEGORIES
+
+    # Flatten feature list
+    all_features = []
+    for cat, features in FEATURE_CATEGORIES.items():
+        for f in features:
+            all_features.append(f["name"])
+
+    if args.list:
+        print("Available features:")
+        for cat, features in FEATURE_CATEGORIES.items():
+            print(f"  [{cat}]")
+            for f in features:
+                name = f["name"]
+                enabled = cfg.get("enabled_features", []) == [] or name in cfg.get("enabled_features", all_features)
+                status = "on" if enabled else "off"
+                print(f"    {name}: {status}  ({f['desc']})")
+        return
+
+    if args.reset:
+        app.set_config({"enabled_features": []})
+        print("Features reset to all enabled (default behavior)")
+        return
+
+    if args.list_features:
+        enabled = cfg.get("enabled_features", [])
+        if not enabled:
+            enabled = all_features
+        disabled = [f for f in all_features if f not in enabled]
+        print(f"Enabled features ({len(enabled)}): {', '.join(enabled)}")
+        if disabled:
+            print(f"Disabled features ({len(disabled)}): {', '.join(disabled)}")
+        return
+
+    # Get current enabled state
+    enabled_features = set(cfg.get("enabled_features", [])) if cfg.get("enabled_features") else set(all_features)
+
+    if args.enable:
+        for name in args.enable:
+            if name not in all_features:
+                print(f"Warning: '{name}' is not a recognized feature. Skipping.")
+            else:
+                enabled_features.add(name)
+                print(f"Enabled: {name}")
+
+    if args.disable:
+        for name in args.disable:
+            if name not in all_features:
+                print(f"Warning: '{name}' is not a recognized feature. Skipping.")
+            elif name in enabled_features:
+                enabled_features.discard(name)
+                print(f"Disabled: {name}")
+
+    if args.enable or args.disable:
+        # If enabled_features is empty, that means use all (default)
+        if enabled_features == set(all_features):
+            app.set_config({"enabled_features": []})
+            print("All features enabled (default)")
+        else:
+            app.set_config({"enabled_features": sorted(list(enabled_features))})
+            print(f"Saved: {len(enabled_features)} features enabled")
+
+
+def cmd_quickstart(args):
+    """Interactive quick-start: noise recording, calibration, training, and live mode."""
+    app = build_app(args)
+    app.start()
+    print("\n=== WinTap QuickStart ===")
+    print("This will set up your laptop for tap gestures.\n")
+
+    # Step 1: Check sensors
+    st = app.status()
+    if not st.get("rates", {}).get("gyro"):
+        print("ERROR: No IMU sensor detected. Check that your laptop has a built-in accelerometer/gyroscope.")
+        print("Run 'python -m wintap sources' for sensor info.\n")
+        return
+    print(f"✓ IMU sensor detected ({st['rates'].get('gyro', 0)} Hz)\n")
+
+    # Step 2: Record noise
+    print("Step 1: Recording 30 seconds of noise...")
+    print("Please make desk knocks, move the lid, and adjust the laptop.")
+    print("Press Ctrl+C to skip.\n")
+    try:
+        input("Press Enter to start noise recording (30s)...")
+        app.negatives_start({"seconds": 30})
+        run_event_loop(app, until=lambda a: a.status()["mode"] != "negatives", quiet=False)
+        print("✓ Noise examples recorded\n")
+    except KeyboardInterrupt:
+        print("Skipped noise recording\n")
+
+    # Step 3: Calibration
+    rows = getattr(args, "rows", 2)
+    cols = getattr(args, "cols", 2)
+    per_zone = getattr(args, "per_zone", 10)
+    print(f"Step 2: Calibrating {rows}x{cols} grid, {per_zone} taps per zone...")
+    print(f"Tap the highlighted zone {rows * cols * per_zone} times total.\n")
+    app.calibrate_start({"rows": rows, "cols": cols, "per_zone": per_zone, "block": 5})
+    run_event_loop(app, until=lambda a: a.status()["mode"] != "calibrate", quiet=True)
+    print("\n✓ Calibration done\n")
+
+    # Step 4: Train model
+    print("Step 3: Training model...")
+    time.sleep(0.5)
+    rep = app.train()
+    print_report(rep)
+    print()
+
+    # Step 5: Start live
+    print("Step 4: Starting live mode (Ctrl+C to stop)...")
+    print("Tap your lid zones to test. Actions are dry-run (won't execute).\n")
+    app.set_config({"actions": {"z0": "desktop_left", "z1": "desktop_right",
+                                "z2": "play_pause", "z3": "lock"}})
+    try:
+        run_event_loop(app)
+    except KeyboardInterrupt:
+        print("\n✓ QuickStart complete. Your configuration is saved.")
+
+
+def cmd_autostart(args):
+    """Start WinTap automatically at Windows login (on), disable it (off), or show state (status)."""
+    import os
+    startup = os.path.join(os.environ.get("APPDATA", ""),
+                           r"Microsoft\Windows\Start Menu\Programs\Startup")
+    bat = os.path.join(startup, "wintap.bat")
+    if args.action == "status":
+        print(f"autostart: {'ON' if os.path.exists(bat) else 'OFF'}")
+        print(f"entry: {bat}")
+        return
+    if args.action == "on":
+        os.makedirs(startup, exist_ok=True)
+        exe = sys.executable
+        pyw = os.path.join(os.path.dirname(exe), "pythonw.exe")
+        if os.path.exists(pyw):
+            exe = pyw  # no console window at login
+        with open(bat, "w", newline="") as f:
+            f.write(f'@echo off\r\n"{exe}" -m wintap serve --port {args.port}\r\n')
+        print(f"autostart ON -> {bat}")
+        print("WinTap starts at next login. Stop a running instance with Ctrl+C, or `wintap autostart off`.")
+    else:
+        if os.path.exists(bat):
+            os.remove(bat)
+            print("autostart OFF (startup entry removed; a currently running instance keeps running)")
+        else:
+            print("autostart already OFF")
+
+
 def cmd_touch(args):
     app = build_app(args)
     rows, cols = max(1, min(6, args.rows)), max(1, min(6, args.cols))
@@ -297,12 +465,36 @@ def main():
     sp.add_argument("--cols", type=int, default=3)
     sp.set_defaults(fn=cmd_touch)
 
+    sp = sub.add_parser(parents=[common], name="autostart",
+                        help="start WinTap automatically at Windows login")
+    sp.add_argument("action", choices=["on", "off", "status"])
+    sp.add_argument("--port", type=int, default=8765)
+    sp.set_defaults(fn=cmd_autostart)
+
     sp = sub.add_parser(parents=[common], name="demo", help="full pipeline on a simulated laptop (no IMU needed)")
     sp.add_argument("--fast", action="store_true", help="no real-time pacing")
     sp.add_argument("--rows", type=int, default=2)
     sp.add_argument("--cols", type=int, default=2)
     sp.add_argument("--per-zone", type=int, default=6)
     sp.set_defaults(fn=cmd_demo)
+
+    sp = sub.add_parser(parents=[common], name="version", help="show wintap version")
+    sp.set_defaults(fn=cmd_version)
+
+    sp = sub.add_parser(parents=[common], name="features", help="manage feature toggles")
+    sp.add_argument("--list", action="store_true", help="list all features")
+    sp.add_argument("--status", action="store_true", help="show enabled/disabled features")
+    sp.add_argument("--list-features", action="store_true", help="show current feature status")
+    sp.add_argument("--enable", nargs="*", help="enable specified features")
+    sp.add_argument("--disable", nargs="*", help="disable specified features")
+    sp.add_argument("--reset", action="store_true", help="reset to all features enabled")
+    sp.set_defaults(fn=cmd_features)
+
+    sp = sub.add_parser(parents=[common], name="quickstart", help="interactive setup wizard")
+    sp.add_argument("--rows", type=int, default=2, help="grid rows (default 2)")
+    sp.add_argument("--cols", type=int, default=2, help="grid columns (default 2)")
+    sp.add_argument("--per-zone", type=int, default=10, help="taps per zone (default 10)")
+    sp.set_defaults(fn=cmd_quickstart)
 
     args = p.parse_args()
     if not hasattr(args, "data"):

@@ -169,6 +169,14 @@ BUILTINS = {
     "mute": lambda s: send_keys([VK["VOLUME_MUTE"]], s),
     "lock": lambda s: send_keys([VK["LWIN"], VK["L"]], s),
     "privacy_guard": privacy_guard,
+    "double_tap": lambda s: send_keys([VK["MEDIA_PLAY_PAUSE"]], s),  # rapid double-tap action
+}
+
+# Gesture patterns recognized from tap sequences
+Gestures = {
+    "double_tap": "double_tap",    # two taps within 0.6s in same zone
+    "swipe_left": "desktop_left",  # drag left on lid triggers desktop switch left
+    "swipe_right": "desktop_right",  # drag right on lid triggers desktop switch right
 }
 
 _DEVNULL = subprocess.DEVNULL

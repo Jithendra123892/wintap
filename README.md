@@ -40,8 +40,8 @@ Same pipeline as LidTap, retargeted to Windows:
      sessions, so everything (including the tests) runs on machines with no IMU.
 2. **Trigger** — 5 Hz high-pass on the gyro, adaptive threshold
    `max(1.0, 6·σ_noise)` on |twist|; a 200 ms window is cut per tap.
-3. **Features** — 70 per-tap features (onset/decay/peak timing, signed peak
-   gyro direction, gyro/accel energy ratio, spectral peaks, …).
+3. **Features** — 188 per-tap features (pressure-aware, spectral, templates)
+   for superior tap detection accuracy.
 4. **Model** — kNN / centroid / SVM / logreg / RF, cross-validated per user,
    plus open-set novelty rejection ("unfamiliar tap"), trained from your own
    calibration taps + recorded desk-bump negatives.
@@ -94,6 +94,176 @@ actions per zone: `play_pause`, `next_track`, `volume_up`, `desktop_left`, `lock
 `python -m wintap serve` opens a local dashboard (loopback-only, token
 protected, no framing) to calibrate zones, watch live events, train, and assign
 actions per zone — the same UI as LidTap.
+
+## Installation (for another user)
+
+### Quick Installer (Recommended for Friends)
+
+**Option 1: Run from PyPI (when published)**
+```bat
+pip install wintap
+wintap quickstart  # guides you through calibration
+```
+
+**Option 2: Download & Run (No Git needed)**
+1. Click "Code" → "Download ZIP" on GitHub
+2. Extract to a folder (e.g., `C:\Users\YourName\Applications\wintap`)
+3. Open Command Prompt and run:
+```bat
+cd C:\Users\YourName\Applications\wintap
+pip install .[all]
+python -m wintap version
+```
+
+**Option 3: Portable Mode (No installation needed)**
+```bat
+cd path\to\wintap
+python -m wintap demo --source synthetic  # test without IMU
+```
+
+### Verify Installation
+
+```bat
+python -m wintap version
+python -m wintap sources  # check available sensors
+python -m wintap serve    # start the web UI
+```
+
+### First-Time Setup for Your Friend
+
+1. **Start the web dashboard**: `python -m wintap serve`
+2. **Open browser**: Go to `http://127.0.0.1:8765`
+3. **Go to Calibrate tab** and:
+   - Record 30 seconds of noise (desk knocks, lid movement)
+   - Do 2×2 grid calibration with 5-10 taps per zone
+4. **Go to Model tab** and click "Retrain"
+5. **Go to Live tab** and enable "Run the zone's command on each accepted tap"
+
+### Enabling/Disabling Features
+
+**Via Web UI (tab 4: Features)**:
+- Toggle individual features on/off
+- Click "Reset to Default" to restore all
+- Click "Save Feature Settings" to persist
+
+**Via CLI**:
+```bat
+# List all available features
+python -m wintap features --list
+
+# Enable specific features
+python -m wintap features --enable twist_direction tap_strength
+
+# Disable specific features
+python -m wintap features --disable spectral_band_0
+
+# Reset to defaults
+python -m wintap features --reset
+
+# Show current status
+python -m wintap features --status
+```
+
+### Enable / disable WinTap itself
+
+```bat
+:: run it manually (stops with Ctrl+C)
+wintap serve --open
+
+:: start automatically at every Windows login (no console window)
+wintap autostart on
+
+:: check whether autostart is set
+wintap autostart status
+
+:: disable autostart (a running instance keeps running until you stop it)
+wintap autostart off
+```
+
+- **Pause actions without stopping detection**: in the web UI Live tab, uncheck
+  "Run the zone's command on each accepted tap" (same as
+  `POST /api/config {"actions_enabled": false}`).
+- **Stop a running instance**: Ctrl+C in its terminal, or close the window it
+  opened; with autostart, run `wintap autostart off` for the next boots.
+- **Uninstall**: `pip uninstall wintap`
+
+### On a laptop that has a motion sensor (2-in-1s, some ultrabooks)
+
+`wintap sources` will show `winrt_accel: true` / `winrt_gyro: true` and the
+`auto` source uses the built-in IMU directly — no microphone involved, and
+touchscreen taps get full 2D position from the gyro vector. If Windows exposes
+no IMU but a USB one is plugged in: `pip install "wintap[hid]"`.
+On machines with no sensor at all, `auto` falls back to the microphone
+(acoustic knock detection) — see `docs/acoustic.md`.
+
+### Version Management
+
+```bat
+# Check current version
+python -m wintap version
+
+# Check for updates
+pip list | findstr wintap
+
+# Upgrade (when published)
+pip install --upgrade wintap
+```
+
+**Version History**: See `CHANGELOG.md` for details.
+
+### Security
+
+**WinTap is designed with security and isolation:**
+
+1. **Local-only access**: Web UI only binds to `127.0.0.1` (localhost). No remote access is possible.
+
+2. **Token protection**: All API endpoints require a per-run token embedded in the HTML page. This prevents:
+   - Cross-site request forgery (CSRF)
+   - Unauthorized command injection
+
+3. **No system access**: The tool only reads IMU sensor data and sends keyboard/mouse inputs. It:
+   - Does NOT read/write files outside `%LOCALAPPDATA%\WinTap`
+   - Does NOT execute arbitrary code without explicit user-configured actions
+   - Uses `SendInput` only for predefined key combinations or shell commands you configure
+
+4. **No privilege escalation**: WinTap runs as a regular user. It never requires:
+   - Administrator rights
+   - Accessibility permissions (unlike macOS)
+   - Kernel drivers or hardware access beyond IMU
+
+5. **Privacy**: 
+   - Data stays local (no telemetry, no cloud)
+   - No personal data collection
+   - Your tap patterns never leave your machine
+
+### For Your Friend: Safe Installation Steps
+
+**Before giving to your friend**:
+1. Read this README completely yourself first
+2. Test the full workflow: calibrate → train → live mode
+
+**To share with your friend**:
+1. **Package it**: Zip the entire wintap folder
+2. **Include README.md**: Your friend needs this file
+3. **Include requirements**: The `[all]` extras need `winsdk` and `hidapi`
+
+**Your friend should**:
+1. Extract to a location they can access (e.g., Desktop)
+2. Open Command Prompt (NOT PowerShell)
+3. Run: `pip install .[all]` from inside the folder
+4. Run: `python -m wintap serve`
+5. Open browser to `http://127.0.0.1:8765`
+6. Follow the web UI setup wizard
+
+**Troubleshooting for your friend**:
+- If `pip install .[all]` fails, try: `pip install winsdk hidapi hid-parser`
+- If sensor not found, check that laptop has an IMU (most 2-in-1s, tablets, modern laptops do)
+- If permissions error, they may need to run Command Prompt as Administrator for `pip install` only
+
+**If you suspect malicious activity**:
+- Check your `config.json` and `dataset.json` in `%LOCALAPPDATA%\WinTap`
+- Review configured actions in the web UI
+- The tool only activates when you run it manually
 
 ## Development
 

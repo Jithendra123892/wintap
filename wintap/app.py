@@ -207,6 +207,11 @@ class App:
             if "model_kind" in body and (body["model_kind"] in model.KINDS or body["model_kind"] == "auto"):
                 self.cfg["model_kind"] = body["model_kind"]
                 self._fit_model()
+            if "enabled_features" in body:
+                if isinstance(body["enabled_features"], list):
+                    self.cfg["enabled_features"] = [str(f) for f in body["enabled_features"]]
+                else:
+                    self.cfg["enabled_features"] = []
             self.save_cfg()
 
     def calibrate_start(self, body):
