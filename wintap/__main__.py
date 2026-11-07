@@ -185,33 +185,34 @@ def cmd_features(args):
     """Manage feature toggles for tap detection.
 
     Usage:
-      wintap features --list              # list all features
+      wintap features --list              # list all features with details
       wintap features --enable N M        # enable features N, M
-      wintap features --disable N M        # disable features N, M
+      wintap features --disable N M       # disable features N, M
       wintap features --reset             # reset to defaults
-      wintap features --status            # show enabled/disabled status
+      wintap features --status            # show enabled/disabled features
+      wintap features --default           # reset to smart defaults
+      wintap features --info NAME         # show detailed info for feature
     """
     app = build_app(args)
     cfg = app.cfg
 
     # Import feature definitions
-    from .features import FEATURE_CATEGORIES
+    from .features import FEATURE_CATEGORIES, FEATURE_METADATA, DEFAULT_ENABLED_FEATURES, get_feature_by_name
 
-    # Flatten feature list
-    all_features = []
-    for cat, features in FEATURE_CATEGORIES.items():
-        for f in features:
-            all_features.append(f["name"])
+    # Get current enabled state
+    enabled_features = set(cfg.get("enabled_features", [])) if cfg.get("enabled_features") else set(DEFAULT_ENABLED_FEATURES)
 
     if args.list:
         print("Available features:")
-        for cat, features in FEATURE_CATEGORIES.items():
-            print(f"  [{cat}]")
-            for f in features:
-                name = f["name"]
-                enabled = cfg.get("enabled_features", []) == [] or name in cfg.get("enabled_features", all_features)
-                status = "on" if enabled else "off"
-                print(f"    {name}: {status}  ({f['desc']})")
+        for cat_name, cat_data in FEATURE_CATEGORIES.items():
+            print(f"\n[{cat_name}] {cat_data['label']}:")
+            print(f"  {cat_data['desc']}")
+            for f in FEATURE_METADATA:
+                if f["category"] == cat_name:
+                    status = "on" if f["name"] in enabled_features else "off"
+                    imp = f["importance"]
+                    deflt = " (default)" if f["default"] else ""
+                    print(f"  [{status}] {f['name']}: {f['desc']}{deflt} [{imp}]")
         return
 
     if args.reset:
@@ -219,38 +220,58 @@ def cmd_features(args):
         print("Features reset to all enabled (default behavior)")
         return
 
-    if args.list_features:
-        enabled = cfg.get("enabled_features", [])
-        if not enabled:
-            enabled = all_features
-        disabled = [f for f in all_features if f not in enabled]
-        print(f"Enabled features ({len(enabled)}): {', '.join(enabled)}")
-        if disabled:
-            print(f"Disabled features ({len(disabled)}): {', '.join(disabled)}")
+    if args.default:
+        app.set_config({"enabled_features": DEFAULT_ENABLED_FEATURES})
+        print(f"Features reset to smart defaults: {len(DEFAULT_ENABLED_FEATURES)} essential+useful features enabled")
         return
 
-    # Get current enabled state
-    enabled_features = set(cfg.get("enabled_features", [])) if cfg.get("enabled_features") else set(all_features)
+    if args.list_features:
+        enabled = list(enabled_features)
+        disabled = [f["name"] for f in FEATURE_METADATA if f["name"] not in enabled]
+        print(f"Enabled ({len(enabled)}): {', '.join(enabled) if enabled else 'none (all features)'}")
+        if disabled:
+            print(f"Disabled ({len(disabled)}): {', '.join(disabled)}")
+        return
+
+    if args.info:
+        feat = get_feature_by_name(args.info)
+        if feat:
+            print(f"Feature: {feat['name']}")
+            print(f"  Label: {feat['label']}")
+            print(f"  Description: {feat['desc']}")
+            print(f"  Category: {feat['category']} ({feat['category_label']})")
+            print(f"  Index: {feat['index']}")
+            print(f"  Importance: {feat['importance']}")
+            print(f"  Default: {'enabled' if feat['default'] else 'disabled'}")
+        else:
+            print(f"Feature '{args.info}' not found")
+            all_names = [f['name'] for f in FEATURE_METADATA]
+            print(f"Available: {', '.join(all_names)}")
+        return
 
     if args.enable:
         for name in args.enable:
-            if name not in all_features:
-                print(f"Warning: '{name}' is not a recognized feature. Skipping.")
-            else:
+            feat = get_feature_by_name(name)
+            if feat:
                 enabled_features.add(name)
                 print(f"Enabled: {name}")
+            else:
+                print(f"Warning: '{name}' is not a recognized feature. Skipping.")
 
     if args.disable:
         for name in args.disable:
-            if name not in all_features:
+            feat = get_feature_by_name(name)
+            if feat:
+                if name in enabled_features:
+                    enabled_features.discard(name)
+                    print(f"Disabled: {name}")
+                else:
+                    print(f"Feature '{name}' already disabled")
+            else:
                 print(f"Warning: '{name}' is not a recognized feature. Skipping.")
-            elif name in enabled_features:
-                enabled_features.discard(name)
-                print(f"Disabled: {name}")
 
     if args.enable or args.disable:
-        # If enabled_features is empty, that means use all (default)
-        if enabled_features == set(all_features):
+        if enabled_features == set(f["name"] for f in FEATURE_METADATA):
             app.set_config({"enabled_features": []})
             print("All features enabled (default)")
         else:

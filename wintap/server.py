@@ -68,22 +68,25 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/state":
             return self._send(200, {"status": self.app.status(), "report": self.app.report})
         if path == "/api/features":
-            from .features import FEATURE_CATEGORIES
-            all_features = []
-            for cat, features in FEATURE_CATEGORIES.items():
-                for f in features:
-                    all_features.append(f["name"])
+            from .features import FEATURE_CATEGORIES, FEATURE_METADATA, DEFAULT_ENABLED_FEATURES
             cfg = self.app.cfg
             enabled = cfg.get("enabled_features", [])
             if not enabled:
-                enabled = all_features
+                enabled = DEFAULT_ENABLED_FEATURES
             features_data = {
+                "metadata": FEATURE_METADATA,
                 "categories": FEATURE_CATEGORIES,
-                "all_features": all_features,
                 "enabled": enabled,
                 "count": len(enabled),
+                "default_enabled": DEFAULT_ENABLED_FEATURES,
             }
             return self._send(200, features_data)
+        if path == "/api/version":
+            import re
+            pyproject = (Path(__file__).parent.parent / "pyproject.toml").read_text()
+            version_match = re.search(r'^version\s*=\s*"([^"]+)"', pyproject, re.MULTILINE)
+            version = version_match.group(1) if version_match else "unknown"
+            return self._send(200, {"version": version, "timestamp": time.time()})
         self._send(404, {"error": "not found"})
 
     def do_POST(self):

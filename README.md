@@ -60,17 +60,57 @@ Map lid zones to screen positions: `wintap touch --rows 3 --cols 3` creates a 9-
 
 ## Feature Management
 
-Each user can enable/disable individual features for improved accuracy:
+WinTap extracts 188 features per tap, organized into 22 manageable features across three categories:
+
+| Category | Features | Default | Use Case |
+|----------|----------|---------|----------|
+| Core | 8 (essential) | ON | Basic tap classification |
+| Spectral | 12 (useful/experimental) | selective | Frequency-domain analysis |
+| Template | 2 (experimental) | OFF | Raw waveform patterns |
+
+### CLI Usage
 
 ```bat
-python -m wintap features --list         :: all 22 features
-python -m wintap features --enable twist_direction tap_strength
-python -m wintap features --disable spectral_band_0
-python -m wintap features --reset        :: restore defaults
-python -m wintap features --status       :: currently enabled
+python -m wintap features --list           :: show all features with importance
+python -m wintap features --enable NAME     :: enable one or more features
+python -m wintap features --disable NAME    :: disable one or more features
+python -m wintap features --default         :: reset to smart defaults
+python -m wintap features --status          :: show currently enabled features
+python -m wintap features --info NAME       :: detailed info for a feature
 ```
 
-Categories: Core (8), Spectral (12), Template (2). Enable fewer features for faster processing.
+### Web UI Usage
+
+Open `http://127.0.0.1:8765/features` in your browser. Features are grouped by category with:
+- **ON/OFF toggle** - Enable or disable individual features
+- **Importance level** - Essential (green), Useful (blue), Experimental (yellow)
+- **Default state** - Shown as tag, helps identify recommended configuration
+- **Save Settings** - Persists changes for the current user
+
+### Best Practices
+
+- **Minimal configuration**: Enable only Core features for fastest processing
+- **Balanced**: Core + Essential Spectral for most accuracy
+- **Full**: All features enabled for maximum accuracy (slower processing)
+- Test different configurations to find the best speed/accuracy tradeoff
+
+## Version Management
+
+### Check Version
+
+```bat
+python -m wintap version    # outputs: wintap X.Y.Z
+```
+
+### Update
+
+```bat
+pip install --upgrade wintap   # upgrade to latest release
+```
+
+### Version History
+
+See [`CHANGELOG.md`](CHANGELOG.md) for version history and breaking changes.
 
 ## Installation
 
@@ -85,19 +125,21 @@ wintap quickstart
 2. `cd` to folder and run `pip install .[all]`
 3. `python -m wintap serve` to start
 
-**Option 3: Portable**
+**Option 3: Portable/Testing**
 ```bat
-python -m wintap demo --source synthetic  # offline test
+python -m wintap demo --source synthetic  # offline test, no IMU needed
 ```
 
-## Version Management
+### Safe Multi-User Installation
 
-```bat
-python -m wintap version        :: check version
-pip install --upgrade wintap   :: update
-```
+When installing on a shared laptop:
 
-See `CHANGELOG.md` for version history.
+1. Install once per user with `pip install --user wintap`
+2. Each user can have independent configurations (stored in `%LOCALAPPDATA%\WinTap`)
+3. Use `wintap status` to verify installation
+4. Run `wintap quickstart` to set up per-user calibration and model
+
+⚠️ **Each user must run their own calibration** — models are trained per-user from recorded taps.
 
 ## Security
 

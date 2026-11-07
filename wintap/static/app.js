@@ -36,7 +36,7 @@ let FEATURE_CATEGORIES = {
   ],
 };
 
-const S = { status: null, report: null, rows: [], thr: [], taps: [], paused: false, pausedEnd: 0, cfgSynced: false, features: {}, enabledFeatures: [] };
+const S = { status: null, report: null, rows: [], thr: [], taps: [], paused: false, pausedEnd: 0, cfgSynced: false, features: {}, enabledFeatures: [], featureMetadata: [], categories: {}, categoryInfo: {} };
 
 async function api(cmd, body = {}) {
   const r = await fetch("/api/" + cmd, {
@@ -54,6 +54,17 @@ async function fetchFeatures() {
     const r = await fetch("/api/features");
     const j = await r.json();
     S.enabledFeatures = j.enabled || [];
+    S.featureMetadata = j.metadata || [];
+    S.categories = j.categories || {};
+    S.defaultEnabled = j.default_enabled || [];
+    S.count = j.count || 0;
+
+    // Category info from server or defaults
+    S.categoryInfo = {
+      core: { label: "Core Features", desc: "Essential for basic tap classification", default: true, color: "#28a745", importance: "essential" },
+      spectral: { label: "Spectral Features", desc: "Frequency-domain analysis features", default: true, color: "#17a2b8", importance: "useful" },
+      template: { label: "Template Features", desc: "Raw waveform templates for pattern matching", default: false, color: "#ffc107", importance: "experimental" }
+    };
     return j;
   } catch (e) {
     console.error("Failed to fetch features:", e);
@@ -530,105 +541,178 @@ function renderSignatures(rep) {
   }
 }
 
+// ---------------------------------------------------------------- importance indicator
+function getImportanceColor(importance) {
+  const colors = { essential: "#28a745", useful: "#17a2b8", experimental: "#ffc107" };
+  return colors[importance] || "#6c757d";
+}
+
+function getImportanceLabel(importance) {
+  const labels = { essential: "Essential", useful: "Useful", experimental: "Experimental" };
+  return labels[importance] || "Unknown";
+}
+
 // ---------------------------------------------------------------- features tab
 async function renderFeatures() {
   const data = await fetchFeatures();
-  S.categories = data.categories || FEATURE_CATEGORIES;
-  S.allFeatures = data.all_features || [];
+
+  // Build metadata lookup
+  S.featureMetadata = data.metadata || [];
   S.enabledFeatures = data.enabled || [];
+  S.defaultEnabled = data.default_enabled || [];
 
-  // Render core features
-  const coreGroup = $("#coreFeatures");
-  let idx = 0;
-  for (const [catName, features] of Object.entries(S.categories)) {
-    const group = document.getElementById(catName + "Features");
-    if (!group) continue;
-    group.innerHTML = features.map((f) => {
-      const enabled = S.enabledFeatures.includes(f.name);
-      return `
-    <label class="check" style="margin: 4px 0;">
-      <input type="checkbox" data-feature="${f.name}" ${enabled ? "checked" : ""}>
-      <span>${f.label}</span> <span class="muted" style="font-size:11px">(${f.desc})</span>
-    </label>
+  // Category info
+  const catInfo = {
+    core: {
+      label: "Core Features",
+      desc: "Essential features for basic tap classification",
+      default: true,
+      color: "#28a745",
+      importance: "essential"
+    },
+    spectral: {
+      label: "Spectral Features",
+      desc: "Frequency-domain features for distinguishing tap types",
+      default: true,
+      color: "#17a2b8",
+      importance: "useful"
+    },
+    template: {
+      label: "Template Features",
+      desc: "Raw waveform templates for pattern matching",
+      default: false,
+      color: "#ffc107",
+      importance: "experimental"
+    }
+  };
+  S.categoryInfo = catInfo;
+
+  // Build features by category
+  const categories = ["core", "spectral", "template"];
+
+  categories.forEach(catName => {
+    const group = $("#" + catName + "Features");
+    if (!group) return;
+
+    const info = catInfo[catName];
+    const features = S.featureMetadata.filter(f => f["category"] === catName);
+
+    // Category header
+    const header = document.createElement("div");
+    header.className = "category-header";
+    header.innerHTML = `
+      <div class="cat-title">
+        <span class="cat-label">${info.label}</span>
+        <span class="cat-desc">${info.desc}</span>
+      </div>
+      <div class="cat-meta">
+        <span class="tag tag-${info.importance}">${info.importance.charAt(0).toUpperCase() + info.importance.slice(1)}</span>
+        <span class="cat-default">${info.default ? "Default: ON" : "Default: OFF"}</span>
+        <span class="cat-count">${features.length} features</span>
+      </div>
+    `;
+
+    let html = header.outerHTML;
+    html += '<div class="feature-list">';
+
+    features.forEach((feat, idx) => {
+      const enabled = S.enabledFeatures.includes(feat["name"]);
+      const imp = feat["importance"] || "useful";
+      const impLabel = getImportanceLabel(imp);
+      const impColor = getImportanceColor(imp);
+
+      html += `
+        <label class="check feature-item" data-feature="${feat["name"]}">
+          <input type="checkbox" data-feature="${feat["name"]}" ${enabled ? "checked" : ""}>
+          <div class="feature-content">
+            <span class="feature-name">${feat["label"]}</span>
+            <span class="feature-desc">${feat["desc"]}</span>
+            <div class="feature-meta">
+              <span class="imp-tag" style="background:${impColor}">${impLabel}</span>
+              ${feat["default"] ? '<span class="default-tag">default</span>' : ''}
+            </div>
+          </div>
+        </label>
       `;
-    }).join("");
+    });
 
-    // Add event listeners for checkboxes
+    html += '</div>';
+    group.innerHTML = html;
+
+    // Add event listeners
     group.querySelectorAll("input[type=checkbox]").forEach(cb => {
-      cb.onchange = () => {
-        const name = cb.dataset.feature;
-        if (cb.checked) {
-          if (!S.enabledFeatures.includes(name)) S.enabledFeatures.push(name);
+      cb.onchange = function() {
+        const name = this.dataset.feature;
+        if (this.checked) {
+          if (!S.enabledFeatures.includes(name)) {
+            S.enabledFeatures.push(name);
+          }
         } else {
           const i = S.enabledFeatures.indexOf(name);
           if (i >= 0) S.enabledFeatures.splice(i, 1);
         }
-        renderFeatures(); // Re-render to update count
+        updateFeatureCount();
       };
     });
-  }
+  });
 
-  // Update count
-  const enabledCount = document.querySelectorAll("#features input:checked").length;
-  $("#nFeatures").textContent = enabledCount;
+  updateFeatureCount();
 }
 
-// ---------------------------------------------------------------- feature chart
-function drawFeatureChart() {
-  if (!S.lastTap || !$("#features").classList.contains("on")) return;
-  const [c, w, h] = canvas2d($("#featureChart"));
-  c.fillStyle = COL.bg;
-  c.fillRect(0, 0, w, h);
-
-  // Draw feature bar chart for last tap
-  const f = S.lastTap.f || [];
-  if (!f.length) return;
-
-  const barW = w / Math.max(f.length, 1);
-  for (let i = 0; i < f.length; i++) {
-    const val = (f[i] + 0.5) * 100; // normalize -0.5..0.5 to 0..100
-    const barH = Math.min(200, Math.abs(val) * 80);
-    const color = val > 0 ? COL.good : COL.warn;
-
-    c.fillStyle = color;
-    c.fillRect(i * barW + 4, h - 18 - barH, barW - 8, barH);
-
-    // Add labels for key features
-    if ([0, 6, 7, 12].includes(i)) {
-      c.fillStyle = COL.text;
-      c.font = "10px monospace";
-      c.fillText(i, i * barW + barW/2 - 3, h - 4);
-    }
-  }
-
-  // Update legend
-  const legend = $("#featureLegend");
-  legend.innerHTML = `
-    <span><i style="background:${COL.good}"></i> Positive value</span>
-    <span><i style="background:${COL.warn}"></i> Negative value</span>
-  `;
+function updateFeatureCount() {
+  const enabledCount = document.querySelectorAll("#features input:checked").length;
+  $("#nFeatures").textContent = enabledCount;
 }
 
 // ---------------------------------------------------------------- version button
 $("#versionBtn").onclick = () => {
   api("version", {}).then((j) => {
-    $("#versionInfo").textContent = `wintap version ${j.version || "0.1.0"}`;
+    const v = j.version || "unknown";
+    const t = j.timestamp ? new Date(j.timestamp * 1000).toLocaleString() : "";
+    $("#versionInfo").innerHTML = `
+      <div class="version-info">
+        <span class="version-badge">v${v}</span>
+        ${t ? `<span class="version-time">Updated: ${t}</span>` : ''}
+      </div>
+      <div class="feature-summary">
+        <div class="feature-cat">
+          <span class="cat-dot" style="background:#28a745"></span>
+          <span>Core (8) — Essential, default ON</span>
+        </div>
+        <div class="feature-cat">
+          <span class="cat-dot" style="background:#17a2b8"></span>
+          <span>Spectral (12) — Frequency features, selective defaults</span>
+        </div>
+        <div class="feature-cat">
+          <span class="cat-dot" style="background:#ffc107"></span>
+          <span>Template (2) — Waveform shapes, default OFF</span>
+        </div>
+      </div>
+    `;
+  }).catch(() => {
+    $("#versionInfo").textContent = "Could not load version info";
   });
 };
 
 // ---------------------------------------------------------------- reset/save features
 $("#resetFeatures").onclick = () => {
-  document.querySelectorAll("#features input").forEach(cb => cb.checked = true);
-  renderFeatures();
+  const defaults = S.defaultEnabled || S.featureMetadata.filter(f => f["default"]).map(f => f["name"]);
+  document.querySelectorAll("#features input[type=checkbox]").forEach(cb => {
+    cb.checked = defaults.includes(cb.dataset.feature);
+  });
+  updateFeatureCount();
 };
 
 $("#saveFeatures").onclick = () => {
   const enabled = [];
-  document.querySelectorAll("#features input").forEach(cb => {
+  document.querySelectorAll("#features input[type=checkbox]").forEach(cb => {
     if (cb.checked) enabled.push(cb.dataset.feature);
   });
-  api("config", { enabled_features: enabled });
-  alert(`Saved ${enabled.length} enabled features`);
+  api("config", { enabled_features: enabled }).then(() => {
+    alert(`Saved ${enabled.length} enabled features`);
+  }).catch(e => {
+    alert(`Error saving: ${e.message || e}`);
+  });
 };
 
 // ---------------------------------------------------------------- boot
